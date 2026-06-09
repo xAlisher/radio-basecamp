@@ -1,0 +1,10 @@
+/result
+/result-*
+result
+result-*
+.direnv/
+build/
+*.so
+*.dylib
+flake.lock merge=ours
+halt.md

@@ -1,0 +1,23 @@
+{
+  "name": "radio_module",
+  "version": "0.1.0",
+  "type": "core",
+  "category": "media",
+  "description": "Decentralized audio broadcast: MediaMTX origin control, ffplay playback, and LogosMessaging discovery (announce/subscribe).",
+  "main": "radio_module_plugin",
+  "dependencies": ["delivery_module"],
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": ["ffmpeg", "mediamtx"]
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": ["Qt6 REQUIRED COMPONENTS Core Network"],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": ["Qt6::Core", "Qt6::Network"]
+    }
+  }
+}
