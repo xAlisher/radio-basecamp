@@ -185,6 +185,10 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 | MediaMTX needs `paths: all_others` for arbitrary paths | ✅ (#2 spike) | | | |
 | delivery_module builds as a dep (pinned v0.1.1 + follows) | | | ✅ (#1 build green) | |
 | radio_module + radio_ui compile (nix build) | ✅ (#1 2026-06-10) | | | |
+| radio_ui loads + renders both tabs (integration-test) | ✅ (#1 2026-06-10, runtime: plugin loaded, expectTexts passed) | | | |
+| radio_module loads + dispatches ping (logoscore, isolated dir) | ✅ (#1 2026-06-10: registry connect + "Method call successful", same as canonical capability_module) | | | |
+| Q_INVOKABLE JSON return value readback | | | | ⚠️ blocked in bare logoscore — capability handshake fails for ALL modules (capability_module.requestModule also returns `false`); needs AppImage |
+| initLogos = Q_INVOKABLE not override | ✅ (loads in logoscore; canonical capability_module uses identical signature — capability_module_plugin.h:24) | | | |
 | tutorial-v3 scaffold is current | ✅ (upstream, updated 2026-06-09) | | | |
 
 ## Silent failure modes to guard (enumerate before coding)
@@ -202,11 +206,19 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 `builder-lgx-install-recipe` · `basecamp-security-patterns` · scorched-earth `game_plugin.cpp` (delivery init) ·
 soulseek `PlayerManager.h` / `PlayerBar.qml` (ffplay). Memory: QML layout `implicitHeight` bug.
 
-## Headless-testing strategy (summary)
-- **Core (`radio_module`)** — two tiers (per keeper/stash convention):
-  - **Tier 1** offline: Qt::Test exe in `tests/` + `tests/mocks/` (mock HTTP + `delivery_module` events
-    stub + injectable clock). No network, no AppImage. Wired in `tests/CMakeLists.txt`.
-  - **Tier 2** integration: `tests/run-headless-tests.sh` via `logoscore` single-invocation `-c` calls;
-    network tests gated/XFAIL'd when `delivery_module` is unavailable (logged, never silent-pass).
-- **UI (`radio_ui`)** — `tests/ui-tests.mjs` (v3 framework): `nix build .#integration-test`. Drives a
-  mocked backend, asserts rendered text/state transitions.
+## Headless-testing strategy (summary) — revised after 2026-06-10 trial
+- **UI (`radio_ui`)** — ✅ **WORKING.** `tests/ui-tests.mjs` (v3 framework) → `nix build .#integration-test`
+  loads the plugin in the standalone app and asserts rendered text. First test green (both tabs render).
+  Extend per-issue (#7/#8/#9/#14) with mocked backend states.
+- **Core (`radio_module`)** — **use `logoscore`, NOT the builder's `#unit-tests`.** Finding (2026-06-10):
+  the builder's `logos_test()` framework (`LOGOS_ASSERT`/`mockCFunction`) targets the tutorial's
+  **`_impl` module style** (plain class wrapping a C lib). Our module is **`_plugin`/QObject** style, so
+  `#unit-tests` doesn't fit (the auto-detected `tests/CMakeLists.txt` fails the `logos_test` contract).
+  - **Tier 2 (primary proof):** `tests/run-headless-tests.sh` installs the built `.so` into an **isolated
+    temp `--modules-dir`** (never the shared Basecamp dir) with a `-dev` manifest variant + RPATH patch
+    (`logoscore-headless-testing` skill), then `logoscore -c "radio_module.ping()"`. This loads the real
+    plugin → fires `initLogos` → the meaningful runtime proof. Network tests (#5) XFAIL when
+    `delivery_module` absent (logged, never silent-pass).
+  - **Tier 1 (optional):** standalone Qt::Test exe with SDK includes wired manually, if fast offline unit
+    coverage is wanted later. The current `tests/CMakeLists.txt` + `tests/test_radio.cpp` are placeholders
+    for this — they are NOT the builder `#unit-tests` path and need include wiring before they run.
