@@ -7,6 +7,7 @@
 #include "radio_interface.h"
 
 class LogosAPI;
+class QProcess;
 
 /**
  * @brief radio_module plugin. See radio_interface.h for the API contract.
@@ -50,8 +51,21 @@ signals:
     void eventResponse(const QString& eventName, const QVariantList& args);
 
 private:
+    // --- Origin (#2 spawn + #3 mint) ---
+    QString  writeMediaMtxConfig() const;  // returns config path, or "" on failure
+    bool     spawnMediaMtx(const QString& configPath);
+    void     killMediaMtx();
+    QString  lanIp() const;                // first non-loopback IPv4, else 127.0.0.1
+    static QString randomHex(int bytes);
+    int      port(const char* envVar, int fallback) const;
+
     LogosAPI* m_logosAPI = nullptr;
-    // Issue #2: QProcess* m_mediamtx; Issue #9: PlayerManager; Issue #5: delivery client + station cache.
+
+    QProcess* m_mediamtx = nullptr;
+    QString   m_streamName, m_visibility, m_description;
+    QString   m_path;        // random MediaMTX path = OBS stream key (v1; real publish auth → #18)
+    QString   m_runtimeDir;  // per-stream temp dir holding mediamtx.yml
+    // Issue #9: PlayerManager; Issue #5: delivery client + station cache.
 };
 
 #endif // RADIO_MODULE_PLUGIN_H

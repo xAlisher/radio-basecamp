@@ -69,9 +69,12 @@ TODO there, called via the meta-object system. The create-logos-module skill's `
 - **Headless test:** `tests/run-headless-tests.sh` calls `startStream` → asserts the spawned PID is
   alive and the HLS port answers HTTP 200/404 (not connection-refused); `stopStream` → PID gone.
 
-**#3 — Ingest URL + stream-key minting.** `startStream(name, visibility, description)` returns
-`{whipUrl, rtmpUrl, srtUrl, streamKey, path}`. Random per-stream path/key.
-- **Headless test:** assert returned JSON has all fields; key is non-empty + unique across two calls.
+**#3 — Ingest URL + stream-key minting.** ✅ **DONE (2026-06-10, runtime-proven).** `startStream(configJson)`
+spawns MediaMTX (lands #2 impl) and returns `{ok, path, streamKey, whipUrl, rtmpUrl, srtUrl, hlsUrl}` with the
+host LAN IP; `stopStream` tears it down. Random 16-hex `path` doubles as the OBS stream key in v1 (real
+publish auth → #18). Ports overridable via `RADIO_*_PORT`; binary via `RADIO_MEDIAMTX_BIN`.
+- **Proof:** `tests/run-direct-test.sh` (in-process, bypasses logoscore's gated returns) — ALL PASS:
+  card has all fields, MediaMTX API up after start, down after stop, path unique across calls.
 
 **#4 — MediaMTX status polling.** `getStreamStatus()` → `{state: idle|waiting|receiving|live, hlsUrl}`
 by polling MediaMTX HTTP API in C++ (`QNetworkAccessManager`). Emits `streamStatusChanged` event.
@@ -186,6 +189,7 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 | delivery_module builds as a dep (pinned v0.1.1 + follows) | | | ✅ (#1 build green) | |
 | radio_module + radio_ui compile (nix build) | ✅ (#1 2026-06-10) | | | |
 | radio_ui loads + renders both tabs (integration-test) | ✅ (#1 2026-06-10, runtime: plugin loaded, expectTexts passed) | | | |
+| startStream mints card + spawns MediaMTX, stopStream tears down, path unique | ✅ (#3 2026-06-10, direct-test ALL PASS) | | | |
 | radio_module loads + dispatches ping (logoscore, isolated dir) | ✅ (#1 2026-06-10: registry connect + "Method call successful", same as canonical capability_module) | | | |
 | Q_INVOKABLE JSON return value readback | | | | ⚠️ blocked in bare logoscore — capability handshake fails for ALL modules (capability_module.requestModule also returns `false`); needs AppImage |
 | initLogos = Q_INVOKABLE not override | ✅ (loads in logoscore; canonical capability_module uses identical signature — capability_module_plugin.h:24) | | | |
@@ -219,6 +223,9 @@ soulseek `PlayerManager.h` / `PlayerBar.qml` (ffplay). Memory: QML layout `impli
     (`logoscore-headless-testing` skill), then `logoscore -c "radio_module.ping()"`. This loads the real
     plugin → fires `initLogos` → the meaningful runtime proof. Network tests (#5) XFAIL when
     `delivery_module` absent (logged, never silent-pass).
-  - **Tier 1 (optional):** standalone Qt::Test exe with SDK includes wired manually, if fast offline unit
-    coverage is wanted later. The current `tests/CMakeLists.txt` + `tests/test_radio.cpp` are placeholders
-    for this — they are NOT the builder `#unit-tests` path and need include wiring before they run.
+  - **Tier 1 (in-process, WORKING):** `tests/run-direct-test.sh` builds `tests/direct_test.cpp` against the
+    plugin + `liblogos_sdk.a` and instantiates `RadioModulePlugin` directly — **no IPC/capability layer**, so
+    it can read real return values and observe side effects (the only way to prove side-effectful methods
+    headlessly). Auto-derives Qt/SDK/SSL paths (ldd + `nix develop` env). This is where #3 was proven and
+    where #4/#9/#13 logic gets verified. The builder's `#unit-tests` is NOT used (it targets the `_impl`
+    module style; raw Qt::Test scaffolding was removed).

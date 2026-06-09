@@ -18,10 +18,8 @@ logos_module(
         Qt6
 )
 
-# Tier-1 offline unit tests (Qt::Test). Built standalone; not part of the plugin.
-# Enable with -DRADIO_BUILD_TESTS=ON during dev.
-option(RADIO_BUILD_TESTS "Build radio_module headless unit tests" OFF)
-if(RADIO_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+# Tests are NOT wired through CMake. The builder's #unit-tests targets the tutorial's _impl
+# module style (logos_test()), which doesn't fit our _plugin/QObject module. Instead:
+#   - tests/run-direct-test.sh  — Tier-1 in-process proof (instantiate plugin, call methods)
+#   - tests/run-headless-tests.sh — logoscore load/dispatch smoke
+# See docs/plans/radio-implementation.md (headless-testing strategy).
