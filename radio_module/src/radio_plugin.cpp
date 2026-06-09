@@ -10,6 +10,8 @@
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
+#include <QTcpSocket>
+#include <QJsonArray>
 
 // Uniform JSON return shape so the QML bridge is stable. Implemented per-issue
 // (see docs/plans/radio-implementation.md); remaining methods are stubs.
@@ -179,12 +181,65 @@ QString RadioModulePlugin::stopStream()
     if (!m_runtimeDir.isEmpty()) QDir(m_runtimeDir).removeRecursively();
     qDebug() << "RadioModulePlugin: stream stopped";
     emit eventResponse("streamStopped", QVariantList() << m_path);
-    m_path.clear(); m_streamName.clear();
+    m_path.clear(); m_streamName.clear(); m_lastStreamState.clear();
     return ok();
 }
 
-// --- Not yet implemented (see plan) ---
-QString RadioModulePlugin::getStreamStatus()            { return notImplemented("getStreamStatus"); }   // #4
+// ---------------------------------------------------------------------------
+// #4 — poll MediaMTX for live status.
+// ---------------------------------------------------------------------------
+
+int RadioModulePlugin::httpGet(int apiPort, const QString& path, QString& bodyOut) const
+{
+    QTcpSocket sock;
+    sock.connectToHost(QHostAddress::LocalHost, static_cast<quint16>(apiPort));
+    if (!sock.waitForConnected(800)) return -1;
+    sock.write(QStringLiteral("GET %1 HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                   .arg(path).toUtf8());
+    if (!sock.waitForBytesWritten(800)) return -1;
+    QByteArray raw;
+    while (sock.state() == QAbstractSocket::ConnectedState && sock.waitForReadyRead(800))
+        raw += sock.readAll();
+    raw += sock.readAll();
+    const int sep = raw.indexOf("\r\n\r\n");
+    bodyOut = sep >= 0 ? QString::fromUtf8(raw.mid(sep + 4)) : QString();
+    // status line: "HTTP/1.0 200 OK"
+    const QByteArray status = raw.left(raw.indexOf("\r\n"));
+    const auto parts = status.split(' ');
+    return parts.size() >= 2 ? parts[1].toInt() : -1;
+}
+
+QString RadioModulePlugin::getStreamStatus()
+{
+    QString state = QStringLiteral("idle");
+    if (m_mediamtx) {
+        QString body;
+        const int code = httpGet(port("RADIO_API_PORT", 9997),
+                                 QStringLiteral("/v3/paths/get/%1").arg(m_path), body);
+        if (code != 200) {
+            state = QStringLiteral("waiting");  // path not created yet → OBS not connected
+        } else {
+            const QJsonObject p = QJsonDocument::fromJson(body.toUtf8()).object();
+            const bool ready = p.value("ready").toBool();
+            const bool hasSource = !p.value("source").isNull() && p.value("source").isObject();
+            const bool hasTracks = !p.value("tracks").toArray().isEmpty();
+            state = (ready && hasTracks) ? QStringLiteral("live")
+                  : hasSource           ? QStringLiteral("receiving")
+                                        : QStringLiteral("waiting");
+        }
+    }
+
+    QJsonObject r{{"ok", true}, {"state", state}};
+    if (m_mediamtx)
+        r["hlsUrl"] = QStringLiteral("http://%1:%2/%3/index.m3u8")
+                          .arg(lanIp()).arg(port("RADIO_HLS_PORT", 8888)).arg(m_path);
+    if (state != m_lastStreamState) {
+        m_lastStreamState = state;
+        emit eventResponse("streamStatusChanged", QVariantList() << state);
+    }
+    return QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact));
+}
+
 QString RadioModulePlugin::startDiscovery()             { return notImplemented("startDiscovery"); }     // #5
 QString RadioModulePlugin::addTopic(const QString&)     { return notImplemented("addTopic"); }           // #12
 QString RadioModulePlugin::getStations()               { return notImplemented("getStations"); }         // #9

@@ -58,6 +58,9 @@ private:
     QString  lanIp() const;                // first non-loopback IPv4, else 127.0.0.1
     static QString randomHex(int bytes);
     int      port(const char* envVar, int fallback) const;
+    // Synchronous localhost GET to the MediaMTX API (QTcpSocket — no event-loop reentrancy).
+    // Returns HTTP status code (-1 on connect/read failure); body in bodyOut.
+    int      httpGet(int apiPort, const QString& path, QString& bodyOut) const;
 
     // NB: do NOT declare a LogosAPI* member — initLogos must set the base PluginInterface::logosAPI,
     // which ModuleProxy reads for cross-module IPC (skills: logosapi-member-no-redeclare, initlogos-no-override).
@@ -66,6 +69,7 @@ private:
     QString   m_streamName, m_visibility, m_description;
     QString   m_path;        // random MediaMTX path = OBS stream key (v1; real publish auth → #18)
     QString   m_runtimeDir;  // per-stream temp dir holding mediamtx.yml
+    QString   m_lastStreamState;  // for streamStatusChanged edge detection (#4)
     // Issue #9: PlayerManager; Issue #5: delivery client + station cache.
 };
 

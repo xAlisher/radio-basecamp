@@ -34,10 +34,10 @@ Nix only sees git-tracked files — `git add -A` before building.
 ## Issues (see docs/plans/radio-implementation.md for detail)
 | # | Epic | Title | Priority | Status |
 |---|------|-------|----------|--------|
-| 1 | Scaffold | Scaffold both modules, buildable | P0 | skeleton seeded |
-| 2 | Origin | SPIKE: bundle + spawn MediaMTX | P0 | todo |
-| 3 | Origin | Ingest URL + stream-key minting | P0 | todo |
-| 4 | Origin | MediaMTX status polling | P0 | todo |
+| 1 | Scaffold | Scaffold both modules, buildable | P0 | done |
+| 2 | Origin | SPIKE: bundle + spawn MediaMTX | P0 | done |
+| 3 | Origin | Ingest URL + stream-key minting | P0 | done |
+| 4 | Origin | MediaMTX status polling | P0 | done |
 | 5 | Discovery | delivery_module init + topic plumbing | P0 | todo |
 | 6 | Discovery | Announce schema + publish | P0 | todo |
 | 7 | Stream UI | Setup card + start/stop | P0 | todo |

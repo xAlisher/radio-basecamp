@@ -76,10 +76,12 @@ publish auth → #18). Ports overridable via `RADIO_*_PORT`; binary via `RADIO_M
 - **Proof:** `tests/run-direct-test.sh` (in-process, bypasses logoscore's gated returns) — ALL PASS:
   card has all fields, MediaMTX API up after start, down after stop, path unique across calls.
 
-**#4 — MediaMTX status polling.** `getStreamStatus()` → `{state: idle|waiting|receiving|live, hlsUrl}`
-by polling MediaMTX HTTP API in C++ (`QNetworkAccessManager`). Emits `streamStatusChanged` event.
-- **Headless test:** with no OBS connected, status is `waiting`; stub/mock the HTTP layer in `tests/mocks/`
-  to return a publisher-present payload → assert `receiving`/`live`.
+**#4 — MediaMTX status polling.** ✅ **DONE (2026-06-10, runtime-proven).** `getStreamStatus()` →
+`{ok, state: idle|waiting|receiving|live, hlsUrl}` by querying MediaMTX `GET /v3/paths/get/<path>`.
+Uses **`QTcpSocket`** (synchronous, no event-loop reentrancy — not `QNetworkAccessManager`/`QEventLoop`).
+Mapping: no process→idle; 404→waiting; source+ready+tracks→live; source-only→receiving. Emits
+`streamStatusChanged` on edge.
+- **Proof:** direct-test ALL PASS — `waiting` with no publisher, `live` after an ffmpeg RTMP push.
 
 ### Epic C — Discovery: announce + subscribe  (P0)
 
@@ -190,6 +192,7 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 | radio_module + radio_ui compile (nix build) | ✅ (#1 2026-06-10) | | | |
 | radio_ui loads + renders both tabs (integration-test) | ✅ (#1 2026-06-10, runtime: plugin loaded, expectTexts passed) | | | |
 | startStream mints card + spawns MediaMTX, stopStream tears down, path unique | ✅ (#3 2026-06-10, direct-test ALL PASS) | | | |
+| getStreamStatus: waiting (no pub) → live (after ffmpeg push) | ✅ (#4 2026-06-10, direct-test ALL PASS) | | | |
 | radio_module loads + dispatches ping (logoscore, isolated dir) | ✅ (#1 2026-06-10: registry connect + "Method call successful", same as canonical capability_module) | | | |
 | Q_INVOKABLE JSON return value readback | | | | ⚠️ blocked in bare logoscore — capability handshake fails for ALL modules (capability_module.requestModule also returns `false`); needs AppImage |
 | initLogos = Q_INVOKABLE not override | ✅ (loads in logoscore; canonical capability_module uses identical signature — capability_module_plugin.h:24) | | | |

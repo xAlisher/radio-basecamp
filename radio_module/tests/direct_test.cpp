@@ -41,6 +41,22 @@ int main(int argc, char** argv) {
     QThread::msleep(2500);
     ok(mtxApiUp(apiPort), "MediaMTX API up (module spawned it)");
 
+    // --- #4 status: waiting (no publisher) → live (after an ffmpeg push) ---
+    auto state = [&]{ return QJsonDocument::fromJson(p.getStreamStatus().toUtf8())
+                          .object().value("state").toString(); };
+    ok(state() == "waiting", "status 'waiting' with no publisher");
+
+    int rtmp = qEnvironmentVariableIntValue("RADIO_RTMP_PORT"); if (!rtmp) rtmp = 1935;
+    QProcess push;
+    push.start("ffmpeg", {"-hide_banner","-loglevel","error","-re",
+        "-f","lavfi","-i","testsrc=size=320x240:rate=15","-f","lavfi","-i","sine=frequency=1000",
+        "-c:v","libx264","-preset","ultrafast","-tune","zerolatency","-b:v","300k","-c:a","aac",
+        "-f","flv", QString("rtmp://127.0.0.1:%1/%2").arg(rtmp).arg(path1)});
+    push.waitForStarted(3000);
+    QString st; for (int i = 0; i < 12 && st != "live"; ++i) { QThread::msleep(1000); st = state(); }
+    ok(st == "live" || st == "receiving", (QString("status '")+st+"' while publishing").toUtf8());
+    push.kill(); push.waitForFinished(2000);
+
     // --- stopStream tears it down ---
     p.stopStream();
     QThread::msleep(800);
