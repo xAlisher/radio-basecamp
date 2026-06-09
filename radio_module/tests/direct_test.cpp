@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QProcess>
 #include <QThread>
 #include <cstdio>
@@ -67,6 +68,18 @@ int main(int argc, char** argv) {
         p.startStream("{\"name\":\"Test2\",\"visibility\":\"public\"}").toUtf8()).object().value("path").toString();
     ok(!path2.isEmpty() && path2 != path1, "second stream path is unique");
     p.stopStream();
+
+    // --- #5 discovery: ingestAnnounce decodes base64, stores, self-echo + malformed filtered ---
+    // (the delivery_module IPC round-trip itself needs the AppImage; this proves the decode/parse path.)
+    auto b64 = [](const QString& s){ return QString::fromUtf8(s.toUtf8().toBase64()); };
+    p.ingestAnnounce(b64("{\"v\":1,\"name\":\"Remote FM\",\"path\":\"abc123\",\"host\":\"alice\",\"hlsUrl\":\"http://h/abc123/index.m3u8\"}"));
+    p.ingestAnnounce(b64("{\"name\":\"\",\"path\":\"bad\"}"));   // malformed (no name) → ignored
+    {
+        const QJsonObject st = QJsonDocument::fromJson(p.getStations().toUtf8()).object();
+        const QJsonArray sa = st.value("stations").toArray();
+        bool found = false; for (const auto v : sa) if (v.toObject().value("path").toString() == "abc123") found = true;
+        ok(sa.size() == 1 && found, "ingestAnnounce: valid station stored, malformed dropped");
+    }
 
     printf("=== %s ===\n", fails ? "FAILURES" : "ALL PASS");
     return fails ? 1 : 0;

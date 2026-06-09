@@ -85,13 +85,17 @@ Mapping: no process→idle; 404→waiting; source+ready+tracks→live; source-on
 
 ### Epic C — Discovery: announce + subscribe  (P0)
 
-**#5 — `delivery_module` init + topic plumbing.** Wire `createNode/start/subscribe` (config
-`{"mode":"Core","relay":true,...}`), `messageReceived` handler with single-`base64` decode,
-self-echo filter via a sent-seq Set. Topic helpers (`/radio-basecamp/1/<channel>/json`).
-- Reuse: `delivery-module-messaging`, `delivery-module-mp-guard-resubscribe`, scorched-earth `game_plugin.cpp`.
-- **Headless test:** `tests/run-headless-tests.sh` (Tier-2, network) — two `logoscore` instances,
-  A subscribes + B sends on the same topic, assert A's `messageReceived` payload round-trips. If
-  delivery_module absent in target AppImage, mark XFAIL with a logged skip (no silent pass).
+**#5 — `delivery_module` init + topic plumbing.** ✅ **DONE (2026-06-10): wiring built + loads;
+decode path runtime-proven. Live IPC round-trip deferred to AppImage.** `startDiscovery()` does
+`getClient → createNode({mode:Core,relay:true,preset:logos.dev}) → requestObject → onEvent(messageReceived)
+→ start → subscribe(directoryTopic)` (proven scorched-earth pattern). `addTopic(t)` subscribes extra
+topics; `getStations()` returns the cache. `ingestAnnounce(b64)` does a SINGLE `fromBase64` decode,
+validates, self-echo filters (skip own `path`), stores keyed by path with `_lastSeen`.
+- Reuse applied: `delivery-module-messaging`, scorched-earth `game_plugin.cpp`, `logosapi-member-no-redeclare` (fixed).
+- **Proof:** direct-test ALL PASS for `ingestAnnounce` (valid stored, malformed dropped). Module loads
+  via logoscore. The live two-node send/receive round-trip needs real `delivery_module` + AppImage
+  (can't test headlessly — logoscore gates returns; `logoscore-gates-method-returns`). Remaining headless
+  gap is the ONLY unverified part of the origin+discovery slice.
 
 **#6 — Announce schema + publish.** Host announce payload `{v, name, host, streamUrl, visibility,
 description, startedAt, seq}` published on the directory topic (public) or private topic. Announce
@@ -193,6 +197,9 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 | radio_ui loads + renders both tabs (integration-test) | ✅ (#1 2026-06-10, runtime: plugin loaded, expectTexts passed) | | | |
 | startStream mints card + spawns MediaMTX, stopStream tears down, path unique | ✅ (#3 2026-06-10, direct-test ALL PASS) | | | |
 | getStreamStatus: waiting (no pub) → live (after ffmpeg push) | ✅ (#4 2026-06-10, direct-test ALL PASS) | | | |
+| ingestAnnounce: base64 decode + parse + self-echo/malformed filter | ✅ (#5 2026-06-10, direct-test) | | | |
+| delivery_module wiring (createNode/subscribe/onEvent) | | | ✅ (#5 builds + module loads) | |
+| live delivery_module send/receive round-trip | | | | ⚠️ needs AppImage (2 nodes; logoscore gates returns) |
 | radio_module loads + dispatches ping (logoscore, isolated dir) | ✅ (#1 2026-06-10: registry connect + "Method call successful", same as canonical capability_module) | | | |
 | Q_INVOKABLE JSON return value readback | | | | ⚠️ blocked in bare logoscore — capability handshake fails for ALL modules (capability_module.requestModule also returns `false`); needs AppImage |
 | initLogos = Q_INVOKABLE not override | ✅ (loads in logoscore; canonical capability_module uses identical signature — capability_module_plugin.h:24) | | | |

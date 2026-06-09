@@ -4,9 +4,14 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <QSet>
+#include <QMap>
+#include <QJsonObject>
 #include "radio_interface.h"
 
 class LogosAPI;
+class LogosAPIClient;
+class LogosObject;
 class QProcess;
 
 /**
@@ -47,6 +52,10 @@ public:
     Q_INVOKABLE QString setVolume(int percent) override;
     Q_INVOKABLE QString getPlayerStatus() override;
 
+    // Test/IPC seam (#5): decode + ingest a station announce. Called by the delivery_module
+    // messageReceived handler and directly by tests/direct_test.cpp. Not part of the IPC API.
+    void ingestAnnounce(const QString& base64Payload);
+
 signals:
     void eventResponse(const QString& eventName, const QVariantList& args);
 
@@ -61,6 +70,9 @@ private:
     // Synchronous localhost GET to the MediaMTX API (QTcpSocket — no event-loop reentrancy).
     // Returns HTTP status code (-1 on connect/read failure); body in bodyOut.
     int      httpGet(int apiPort, const QString& path, QString& bodyOut) const;
+    // --- Discovery (#5) ---
+    QString  directoryTopic() const;       // well-known public directory topic
+    bool     subscribeTopic(const QString& topic);
 
     // NB: do NOT declare a LogosAPI* member — initLogos must set the base PluginInterface::logosAPI,
     // which ModuleProxy reads for cross-module IPC (skills: logosapi-member-no-redeclare, initlogos-no-override).
@@ -70,7 +82,14 @@ private:
     QString   m_path;        // random MediaMTX path = OBS stream key (v1; real publish auth → #18)
     QString   m_runtimeDir;  // per-stream temp dir holding mediamtx.yml
     QString   m_lastStreamState;  // for streamStatusChanged edge detection (#4)
-    // Issue #9: PlayerManager; Issue #5: delivery client + station cache.
+
+    // Discovery (#5)
+    LogosAPIClient* m_delivery = nullptr;
+    LogosObject*    m_deliveryObj = nullptr;
+    bool            m_discovering = false;
+    QSet<QString>   m_subscribedTopics;
+    QMap<QString, QJsonObject> m_stations;  // keyed by path; value carries "_lastSeen" ms (TTL → #11)
+    // Issue #9: PlayerManager.
 };
 
 #endif // RADIO_MODULE_PLUGIN_H

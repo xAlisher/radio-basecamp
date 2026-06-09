@@ -24,11 +24,14 @@ MOC="$QT/libexec/moc"
 ROOTS="$(nix develop --command bash -c 'printf "RR %s %s\n" "$LOGOS_CPP_SDK_ROOT" "$LOGOS_MODULE_ROOT"' 2>/dev/null | grep '^RR ')"
 SDK="$(awk '{print $2}' <<<"$ROOTS")"; MODULE="$(awk '{print $3}' <<<"$ROOTS")"
 SDKLIB="$SDK/lib/liblogos_sdk.a"
-echo "QT=$QT  QRO=$QRO  SSL=$SSL_LIB"
+# SDK headers transitively include nlohmann/json.hpp — find it in the store.
+NLO="$(find /nix/store -maxdepth 1 -type d -name '*nlohmann_json*' 2>/dev/null | head -1)"
+echo "QT=$QT  QRO=$QRO  SSL=$SSL_LIB  NLO=$NLO"
 echo "SDK=$SDK  MODULE=$MODULE"
 
 MOCINC="-I$SDK/include/cpp -I$SDK/include/core -I$MODULE/include/module_lib -I$QT/include -I$QT/include/QtCore -Isrc"
 GINC="-Isrc -I$SDK/include/cpp -I$SDK/include/core -I$MODULE/include/module_lib \
+  -isystem $NLO/include \
   -isystem $QT/include -isystem $QT/include/QtCore -isystem $QT/include/QtNetwork \
   -isystem $QT/mkspecs/linux-g++ -isystem $QRO/include/QtRemoteObjects"
 

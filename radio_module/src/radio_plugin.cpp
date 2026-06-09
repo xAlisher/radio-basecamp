@@ -1,5 +1,7 @@
 #include "radio_plugin.h"
 #include "logos_api.h"
+#include "logos_api_client.h"
+#include "logos_object.h"
 #include <QDebug>
 #include <QProcess>
 #include <QJsonDocument>
@@ -240,9 +242,83 @@ QString RadioModulePlugin::getStreamStatus()
     return QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact));
 }
 
-QString RadioModulePlugin::startDiscovery()             { return notImplemented("startDiscovery"); }     // #5
-QString RadioModulePlugin::addTopic(const QString&)     { return notImplemented("addTopic"); }           // #12
-QString RadioModulePlugin::getStations()               { return notImplemented("getStations"); }         // #9
+// ---------------------------------------------------------------------------
+// #5 — discovery: init delivery_module, subscribe, receive + decode announces.
+// Wiring mirrors the proven scorched-earth pattern (game_plugin.cpp). delivery_module
+// base64-encodes once on send, so messageReceived data[2] needs a single decode.
+// ---------------------------------------------------------------------------
+
+QString RadioModulePlugin::directoryTopic() const
+{
+    // delivery_module content-topic convention: /<module>/1/<channel>/<format>
+    return qEnvironmentVariable("RADIO_DIRECTORY_TOPIC",
+                                QStringLiteral("/radio-basecamp/1/directory/json"));
+}
+
+bool RadioModulePlugin::subscribeTopic(const QString& topic)
+{
+    if (topic.isEmpty() || !m_delivery) return false;
+    if (m_subscribedTopics.contains(topic)) return true;
+    m_delivery->invokeRemoteMethod("delivery_module", "subscribe", topic);
+    m_subscribedTopics.insert(topic);
+    return true;
+}
+
+QString RadioModulePlugin::startDiscovery()
+{
+    if (m_discovering) return ok();  // idempotent; reentrancy guard
+    if (!logosAPI) return err("no_logos_api");
+    m_delivery = logosAPI->getClient("delivery_module");
+    if (!m_delivery) return err("no_delivery_client");
+
+    m_delivery->invokeRemoteMethod("delivery_module", "createNode",
+        QStringLiteral("{\"logLevel\":\"INFO\",\"mode\":\"Core\",\"preset\":\"logos.dev\",\"relay\":true}"));
+
+    m_deliveryObj = m_delivery->requestObject("delivery_module");
+    if (m_deliveryObj) {
+        m_delivery->onEvent(m_deliveryObj, "messageReceived",
+            [this](const QString&, const QVariantList& data) {
+                if (data.size() < 3) return;
+                ingestAnnounce(data[2].toString());  // data[2] = base64(payload)
+            });
+    }
+    m_delivery->invokeRemoteMethod("delivery_module", "start");
+    subscribeTopic(directoryTopic());
+    m_discovering = true;
+    qDebug() << "RadioModulePlugin: discovery started on" << directoryTopic();
+    return ok();
+}
+
+QString RadioModulePlugin::addTopic(const QString& topic)
+{
+    if (!m_discovering) return err("discovery_not_started");
+    return subscribeTopic(topic) ? ok() : err("subscribe_failed");
+}
+
+void RadioModulePlugin::ingestAnnounce(const QString& base64Payload)
+{
+    const QByteArray json = QByteArray::fromBase64(base64Payload.toUtf8());  // single decode
+    const QJsonObject o = QJsonDocument::fromJson(json).object();
+    const QString path = o.value("path").toString();
+    if (path.isEmpty() || o.value("name").toString().isEmpty()) return;  // malformed
+    if (!m_path.isEmpty() && path == m_path) return;                     // self-echo filter
+
+    QJsonObject station = o;
+    station["_lastSeen"] = QDateTime::currentMSecsSinceEpoch();  // TTL pruning → #11
+    const bool isNew = !m_stations.contains(path);
+    m_stations[path] = station;
+    if (isNew) qDebug() << "RadioModulePlugin: discovered station" << path;
+    emit eventResponse("stationsChanged", QVariantList() << path);
+}
+
+QString RadioModulePlugin::getStations()
+{
+    QJsonArray arr;
+    for (const QJsonObject& s : m_stations) arr.append(s);  // #11 will prune by _lastSeen here
+    return QString::fromUtf8(QJsonDocument(QJsonObject{{"ok", true}, {"stations", arr}})
+                                 .toJson(QJsonDocument::Compact));
+}
+
 QString RadioModulePlugin::play(const QString&, const QString&) { return notImplemented("play"); }       // #9
 QString RadioModulePlugin::pause()                      { return notImplemented("pause"); }              // #13
 QString RadioModulePlugin::resume()                     { return notImplemented("resume"); }             // #13
