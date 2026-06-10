@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "ui_qml",
   "view": "Main.qml",
+  "icon": "icons/radio.png",
   "category": "media",
   "description": "Radio UI — two tabs (Stream / Listen). Calls radio_module via the logos bridge.",
   "dependencies": ["radio_module"],
