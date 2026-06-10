@@ -103,18 +103,19 @@ in this module:
 The supported fix is to consume `delivery_module` from a **`ui_qml` module with a C++ backend**
 (the shape `logos-delivery-demo` uses); that refactor is in progress on the `ui-qml-backend` branch.
 
-## Privacy ⚠️
+## Privacy 🧅
 
-v1 gives you **sovereign discovery, not streamer anonymity.** Discovery rides LogosMessaging, but the
-audio is a **direct HTTP pull from the host's origin**, and the announce **contains the host's address**
-(`streamUrl`). So any subscriber to a public topic learns the host's IP, and any listener who plays opens
-a direct connection (host ↔ listener IPs both exposed). Today it's a *LAN* IP (LAN-scoped leak), but a
-public deployment would expose the public IP.
+**Onion mode (the default) hides the streamer's IP.** The host runs a **Tor hidden service** in front
+of its origin and announces a `…​.onion` URL — **no IP ever appears in the announce or on the wire**, and
+it reaches listeners through NAT with no port-forwarding. Listeners play through `torsocks`, so the
+host↔listener connection is end-to-end over Tor. The `.onion` and the stream key **persist across
+restarts** (rotate either on demand with ⟳). A listener-side **jitter buffer** (2–20 s) rides out Tor
+latency so audio doesn't chop.
 
-**To actually hide the streamer's IP**, the smallest change for this audio-first module is a **Tor onion
-service**: announce a `…​.onion` URL and route the listener's `ffplay` through Tor (`torsocks`). For
-private/among-friends streams, a **Tailscale/WireGuard mesh** is the easiest. Full threat model + ranked
-options: [`docs/BRIEF.md` §Privacy](docs/BRIEF.md#️-privacy--threat-model--v1-hides-discovery-not-the-streamers-ip).
+A **Direct (LAN)** mode is opt-in for local/low-latency use — that mode pulls audio straight from the
+host's origin, so the announce carries the host address and host↔listener IPs are mutually exposed
+(LAN-scoped today). Full threat model + ranked options:
+[`docs/BRIEF.md` §Privacy](docs/BRIEF.md#️-privacy--threat-model--v1-hides-discovery-not-the-streamers-ip).
 
 ## Dependencies
 
@@ -124,8 +125,12 @@ options: [`docs/BRIEF.md` §Privacy](docs/BRIEF.md#️-privacy--threat-model--v1
 | **radio-ui** (this) | `radio_ui` | this repo | QML UI |
 | **delivery** | `delivery_module` | [logos-delivery-module](https://github.com/logos-co/logos-delivery-module) (pinned v0.1.1) | LogosMessaging announce/subscribe |
 
-External (host-side, system / bundled): **OBS Studio** (capture), **MediaMTX** (origin, bundled via
-nixpkgs), **ffmpeg/ffplay** (playback, system).
+External runtime binaries (not yet bundled in the LGX — see Install):
+- **Host:** **OBS Studio** (capture) + **MediaMTX** (origin; `scripts/install.sh` drops a static build into the module dir).
+- **Onion mode:** **tor** + **torsocks** (system `apt install tor torsocks`, or nix).
+- **Listener:** **ffmpeg/ffplay** (playback, system).
+
+Each binary is resolved as: `RADIO_*_BIN` env override → `<module-dir>[/bin]/<tool>` → `PATH`.
 
 ## Build
 
@@ -137,12 +142,31 @@ cd ../radio_ui   && nix run .     # launches the UI in logos-standalone-app
 
 ### Install into Logos Basecamp
 
+From source:
+
 ```bash
 ./scripts/install.sh    # builds both .lgx and lgpm-installs to LogosBasecamp
 ./scripts/relaunch.sh   # kills logos_host + restarts the AppImage
 ```
 
+From the released LGXs (this repo's [Releases](https://github.com/xAlisher/radio-basecamp/releases)),
+or via the catalog:
+
+```bash
+lgpd repo add https://raw.githubusercontent.com/xAlisher/logos-basecamp-modules/main/logos-repo.json
+lgpd install radio          # installs radio_module + radio_ui
+```
+
 `radio_module` depends on `delivery_module` — install that too (it ships with the platform).
+
+> **⚠️ Requirements before it works:**
+> 1. The [`pre-release-1dc1c08-268` Basecamp build](#compatibility) — newer builds crash at load
+>    ([#31](https://github.com/logos-co/logos-delivery-module/issues/31)).
+> 2. The runtime binaries from [Dependencies](#dependencies) — **the LGX bundles only the plugins**
+>    (runtime-binary bundling is blocked on
+>    [logos-module-builder#114](https://github.com/logos-co/logos-module-builder/issues/114)). Install
+>    `mediamtx` (host), `tor` + `torsocks` (onion), `ffmpeg`/`ffplay` (listener) via apt/nix, or point the
+>    `RADIO_*_BIN` env overrides at them.
 
 ## Test (headless)
 
