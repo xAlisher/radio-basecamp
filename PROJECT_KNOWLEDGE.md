@@ -45,6 +45,40 @@ bandwidth) or **Tailscale mesh** (private streams). Full analysis: `docs/BRIEF.m
 
 ---
 
+## Tor onion mode (shipped — default privacy mode)
+
+Host runs a tor HiddenService (`SocksPort 0`) mapping `:80 → MediaMTX HLS`; the announce carries the
+`.onion` (never `lanIp`). Listener runs a separate tor (`SocksPort`) and plays via `torsocks ffplay`.
+Proven end-to-end across two machines. Hard-won fixes (each was a silent failure):
+
+- **Spawned system binaries must drop `LD_LIBRARY_PATH`/`LD_PRELOAD`** (`cleanSpawnEnv()`). The AppImage
+  poisons the child env → apt `/usr/sbin/tor` loaded the AppImage's libevent → `undefined symbol:
+  evutil_secure_rng_add_bytes` → instant exit (mislabeled `tor_port_in_use`). nix binaries are immune.
+  Platform skill: `appimage-child-ld-library-path`.
+- **MediaMTX gates HLS with a `Secure` cookieCheck cookie.** ffmpeg won't return a Secure cookie over
+  the `http://` onion → 302 loop → silent no-audio. Fix: `ffplay -cookies "cookieCheck=1; path=/"`.
+  Not variant-specific (both `lowLatency` and `mpegts` set it). Local playback hides it (localhost is a
+  secure context).
+- **The hidden-service keys live in a PERSISTENT per-profile dir** (`GenericDataLocation/radio_module/hs`)
+  so the `.onion` survives restarts; `regenerateOnion()` wipes it for a fresh address. **Whoever reads the
+  hostname must read it from THAT dir** — `pollOnionStatus` reading the old temp path left `m_onion`
+  empty → false `publish_timeout` + a bad announce.
+- **Onion-ready detection:** tor logs the descriptor upload at INFO in the `[rend]` domain (not `notice`)
+  → torrc `Log [rend]info file hs.log`; `pollOnionStatus` greps `hs.log` for `upload`+`descriptor`, with
+  a bootstrap-100%+grace fallback. `logos_host` swallows child stderr (#163) — persist failures to a file.
+
+### Persistence + buffering
+- **Stream identity (path + key) is stable across stop/start/restart**: `startStream` REUSES the persisted
+  path/key (mints only when absent); `stopStream` saves `running:false` (keeps the key, no auto-resume);
+  resume re-spawns only if `running`. `regenerateKey()` (⟳ New) rotates the publish key on demand. Resume
+  spawn failures must NOT clear `station.json` (transient port races would lose the key).
+- **Listener jitter buffer:** MediaMTX `hlsVariant: mpegts` + deep playlist; ffplay `-infbuf
+  -live_start_index -<bufferSec>` starts N seconds behind live and rides out Tor latency → no chops.
+  Configurable via `setListenBuffer()` (2–20s slider). Streamer quality is untouched (buffer is
+  listener-side only).
+
+---
+
 ## Proven facts (don't re-derive)
 
 - Cross-machine demo works on **`pre-release-1dc1c08-268`** (`ef6dca8b`, 270/274 MB). `0.1.2` and the

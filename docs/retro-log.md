@@ -2,6 +2,40 @@
 
 Raw captures, reshuffled into PROJECT_KNOWLEDGE.md / skills at `/retro`.
 
+## Week of 2026-06-10 — Tor onion epic (merged 223c5ff)
+
+### Wins
+- [project] Onion radio works end-to-end across two machines (OBS → MediaMTX → Tor HS → discovery →
+  buffered torsocks playback) with no IP exposure. Listener confirmed "arrived, no chops".
+- [process] **Diagnostic-file-over-swallowed-stderr** cracked two opaque failures: writing the spawned
+  binary's output to `/tmp/radio_module/tor-fail.log` revealed the `evutil_secure_rng_add_bytes`
+  symbol error; inspecting tor's `hs.log` + bootstrap revealed the onion was published while the UI
+  said "publishing". logos_host swallows child stderr (#163) — always persist it to a file.
+- [process] A/B'd ffplay/ffprobe flags + raw `curl -D -` over Tor to isolate the exact cause (Secure
+  cookie) instead of guessing — confirmed the fix pulled 40s of audio at 3-20x before shipping.
+
+### Fails
+- [project] Mislabeled the listener failure as `tor_port_in_use` and built a port-retry that could
+  never help. Wrong action: the immediate-exit catch-all assumed a port conflict. Root cause: the apt
+  `/usr/sbin/tor` child inherited the AppImage's `LD_LIBRARY_PATH` → loaded the wrong libevent → died
+  on a missing symbol. Only system (non-nix) binaries hit this, so it was invisible on wild (nix tor).
+  → skill `appimage-child-ld-library-path` (critical).
+- [project] Moving the Tor `HiddenServiceDir` to a persistent path regressed `pollOnionStatus`, which
+  still read the hostname from the old temp path → `m_onion` stayed empty → readiness never checked →
+  false `publish_timeout` + the heartbeat announced no/stale onion (a second cause of "no sound"). Root
+  cause: moved a file's location without updating its reader. → PROJECT_KNOWLEDGE.
+- [project] MediaMTX gates HLS behind a `Secure` cookieCheck cookie; ffmpeg won't return a Secure
+  cookie over the `http://` onion → 302 loop → silent no-audio. Not variant-specific (both lowLatency
+  and mpegts). Fix: ffplay `-cookies "cookieCheck=1; path=/"`. → PROJECT_KNOWLEDGE.
+- [process] Ran the public-stream direct test repeatedly on the live demo host (mediamtx respawn races
+  under load) → noisy flakes on heartbeat/regenerateKey. Root cause: no XDG isolation + competing for
+  ports with the running demo. Fixed test isolation (`XDG_DATA_HOME=$(mktemp -d)`); flakes are the
+  respawn timing, not regressions (clean run is ALL PASS).
+
+### Skills touched
+- Extracted `appimage-child-ld-library-path` (basecamp-skills, ops/critical).
+- Module lessons (cookieCheck, persistent HS dir + hostname reader, reuse-on-start) → PROJECT_KNOWLEDGE.
+
 ## Week of 2026-06-10 — synthesized (no inline /log captures this run)
 
 ### Wins
