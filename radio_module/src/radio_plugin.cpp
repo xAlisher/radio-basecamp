@@ -875,7 +875,9 @@ void RadioModulePlugin::pollOnionStatus()
         return;
     }
     if (m_onion.isEmpty()) {
-        QFile hf(m_torHostDir + "/hs/hostname");
+        // #17 — the hostname lives in the PERSISTENT HS dir now (not m_torHostDir); reading the old
+        // temp path left m_onion empty → readiness never checked → false publish_timeout + bad announce.
+        QFile hf(persistentHsDir() + "/hostname");
         if (hf.open(QIODevice::ReadOnly)) { m_onion = QString::fromUtf8(hf.readAll()).trimmed(); hf.close(); }
     }
     if (m_onion.isEmpty() || m_onionReady) return;
