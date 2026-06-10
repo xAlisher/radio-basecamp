@@ -164,8 +164,14 @@ light ("Waiting for OBS…").
 
 ### Epic H — Hardening & ship  (P2)
 
-**#15 — Error UX & silent-failure guards.** Surface: MediaMTX failed to start, ffplay missing,
-delivery_module absent, port in use. Each maps to a visible message (no silent dead-ends).
+**#15 — Error UX & silent-failure guards.** ✅ **DONE (2026-06-10, runtime-proven).** Backend returns
+distinct codes — `mediamtx_not_found` (`QProcess::FailedToStart`) vs `mediamtx_port_or_config` (immediate
+exit) vs `mediamtx_spawn_failed`; `ffplay_not_found` vs `ffplay_failed`; `no_delivery_client`;
+`config_write_failed`; `name_required`; etc. UI: a checked `call()` helper maps every `{ok:false}` to
+human copy and shows a dismissable error **banner** (`implicitHeight`, not `height`). Failing calls
+routed through it: start/play/addTopic/startDiscovery.
+- **Proof:** integration-test drives a real failed Start (mediamtx absent in the sandbox) → banner shows
+  "Broadcast server (MediaMTX) isn't available on this system." — end-to-end error surfacing verified.
 **#16 — LGX packaging + install.** `nix bundle ... #dual`, `lgpm` install recipe; relaunch script.
   Reuse: `builder-lgx-install-recipe`, `lgx-package-format`.
 **#17 — README + user docs** (mirror beacon/stash README shape).
@@ -221,6 +227,7 @@ scorched-earth P2P notes: distinct `SCORCHED_TCP_PORT`-style node separation if 
 | announce schema + gating (not_live → gate passes when live) | ✅ (#6 2026-06-10, direct-test) | | | |
 | play (ffplay) → playing, stop → stopped | ✅ (#9 2026-06-10, direct-test) | | | |
 | Listen-tab UI elements instantiate | ✅ (#9 2026-06-10, integration-test) | | | |
+| error UX: failed Start surfaces a visible banner | ✅ (#15 2026-06-10, integration-test drives real failure) | | | |
 | delivery_module wiring (createNode/subscribe/onEvent) | | | ✅ (#5 builds + module loads) | |
 | live delivery_module send/receive round-trip | | | | ⚠️ needs AppImage (2 nodes; logoscore gates returns) |
 | radio_module loads + dispatches ping (logoscore, isolated dir) | ✅ (#1 2026-06-10: registry connect + "Method call successful", same as canonical capability_module) | | | |

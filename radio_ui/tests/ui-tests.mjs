@@ -35,6 +35,16 @@ test("radio_ui: empty/transitional state copy (#14)", async (app) => {
   await app.expectTexts(["Waiting for OBS…", "Open to discover stations"]);
 });
 
+test("radio_ui: failed start surfaces an error banner (#15)", async (app) => {
+  // mediamtx isn't on PATH in the standalone-app sandbox, so clicking Start fails →
+  // the error must be surfaced (not a silent dead-end). This drives the REAL backend.
+  await app.click("Start");
+  await app.waitFor(
+    async () => { await app.expectTexts(["Broadcast server (MediaMTX) isn't available on this system."]); },
+    { timeout: 10000, interval: 500, description: "error banner" }
+  );
+});
+
 // Tap-to-play with live stations needs delivery_module announces → cross-machine demo.
 // Note: the Start->OBS-card click-through spawns MediaMTX + needs a non-gated backend, so it is
 // verified in the running app / cross-machine demo, not this hermetic test.

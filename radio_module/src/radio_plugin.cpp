@@ -113,7 +113,7 @@ QString RadioModulePlugin::writeMediaMtxConfig() const
     return cfg.fileName();
 }
 
-bool RadioModulePlugin::spawnMediaMtx(const QString& configPath)
+QString RadioModulePlugin::spawnMediaMtx(const QString& configPath)
 {
     killMediaMtx();
     const QString bin = qEnvironmentVariable("RADIO_MEDIAMTX_BIN", QStringLiteral("mediamtx"));
@@ -121,17 +121,18 @@ bool RadioModulePlugin::spawnMediaMtx(const QString& configPath)
     m_mediamtx->setProcessChannelMode(QProcess::MergedChannels);
     m_mediamtx->start(bin, QStringList() << configPath);
     if (!m_mediamtx->waitForStarted(5000)) {
+        const bool notFound = m_mediamtx->error() == QProcess::FailedToStart;
         qWarning() << "RadioModulePlugin: mediamtx failed to start:" << m_mediamtx->errorString();
         killMediaMtx();
-        return false;
+        return notFound ? QStringLiteral("mediamtx_not_found") : QStringLiteral("mediamtx_spawn_failed");
     }
-    // Catch an immediate crash (e.g. port in use) — #15 surfaces this to the UI.
+    // Immediate exit ⇒ bad config or a port already in use (#15 surfaces this to the UI).
     if (m_mediamtx->waitForFinished(400)) {
         qWarning() << "RadioModulePlugin: mediamtx exited immediately:" << m_mediamtx->readAll();
         killMediaMtx();
-        return false;
+        return QStringLiteral("mediamtx_port_or_config");
     }
-    return true;
+    return QString();
 }
 
 void RadioModulePlugin::killMediaMtx()
@@ -166,8 +167,9 @@ QString RadioModulePlugin::startStream(const QString& configJson)
                       : directoryTopic();
 
     const QString configPath = writeMediaMtxConfig();
-    if (configPath.isEmpty())     return err("config_write_failed");
-    if (!spawnMediaMtx(configPath)) return err("mediamtx_spawn_failed");
+    if (configPath.isEmpty()) return err("config_write_failed");
+    const QString spawnErr = spawnMediaMtx(configPath);
+    if (!spawnErr.isEmpty()) return err(spawnErr);
 
     const QString ip = lanIp();
     const int hls = port("RADIO_HLS_PORT", 8888), whip = port("RADIO_WHIP_PORT", 8889),
@@ -405,7 +407,7 @@ void RadioModulePlugin::killPlayer()
     m_player = nullptr;
 }
 
-bool RadioModulePlugin::startFfplay()
+QString RadioModulePlugin::startFfplay()
 {
     killPlayer();
     const QString bin = qEnvironmentVariable("RADIO_FFPLAY_BIN", QStringLiteral("ffplay"));
@@ -413,11 +415,12 @@ bool RadioModulePlugin::startFfplay()
     m_player->start(bin, QStringList() << "-nodisp" << "-autoexit" << "-loglevel" << "error"
                                        << "-volume" << QString::number(m_volume) << m_playingUrl);
     if (!m_player->waitForStarted(5000)) {
+        const bool notFound = m_player->error() == QProcess::FailedToStart;
         qWarning() << "RadioModulePlugin: ffplay failed:" << m_player->errorString();
         killPlayer();
-        return false;
+        return notFound ? QStringLiteral("ffplay_not_found") : QStringLiteral("ffplay_failed");
     }
-    return true;
+    return QString();
 }
 
 QString RadioModulePlugin::play(const QString& hlsUrl, const QString& stationName)
@@ -425,7 +428,8 @@ QString RadioModulePlugin::play(const QString& hlsUrl, const QString& stationNam
     if (hlsUrl.isEmpty()) return err("no_url");
     m_playingUrl = hlsUrl;
     m_playingStation = stationName;
-    if (!startFfplay()) { m_playingUrl.clear(); m_playingStation.clear(); return err("ffplay_failed"); }
+    const QString e = startFfplay();
+    if (!e.isEmpty()) { m_playingUrl.clear(); m_playingStation.clear(); return err(e); }
     emit eventResponse("playerStatusChanged", QVariantList() << "playing" << stationName);
     return ok();
 }

@@ -48,7 +48,7 @@ Nix only sees git-tracked files — `git add -A` before building.
 | 12 | Liveness | + Add topic (private streams) | P1 | done (live subscribe → AppImage) |
 | 13 | Player | Player controls (pause/resume/vol) | P1 | done (no pause for live) |
 | 14 | Polish | Empty + transitional states | P1 | done |
-| 15 | Harden | Error UX & silent-failure guards | P2 | todo |
+| 15 | Harden | Error UX & silent-failure guards | P2 | done |
 | 16 | Ship | LGX packaging + install | P2 | todo |
 | 17 | Ship | README + user docs | P2 | todo |
 | 18 | Ship | Security pass | P2 | todo |

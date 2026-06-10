@@ -45,13 +45,13 @@ Item {
         target: tabs
         function onCurrentIndexChanged() {
             if (tabs.currentIndex === 1 && !root.discoveryStarted) {
-                root.callParse("startDiscovery", []); root.discoveryStarted = true
+                root.call("startDiscovery", []); root.discoveryStarted = true
             }
         }
     }
     function playStation(s) {
-        root.callParse("play", [s.streamUrl, s.name || ""])
-        root.playingName = s.name || s.path
+        var r = root.call("play", [s.streamUrl, s.name || ""])
+        if (r && r.ok) root.playingName = s.name || s.path
     }
     function uptime(startedAtMs) {
         if (!startedAtMs) return ""
@@ -59,12 +59,40 @@ Item {
         return sec < 60 ? sec + "s" : sec < 3600 ? Math.floor(sec/60) + "m" : Math.floor(sec/3600) + "h"
     }
 
+    property string lastError: ""   // #15 — surfaced in the banner; "" hides it
+
     function callParse(method, args) {
         try {
             var raw = logos.callModule("radio_module", method, args || [])
             var t = JSON.parse(raw)
             return (typeof t === "string") ? JSON.parse(t) : t
         } catch (e) { return null }
+    }
+
+    // #15 — human-readable copy for backend error codes (no silent dead-ends).
+    function errorMessage(code) {
+        var m = {
+            "name_required": "Enter a station name first.",
+            "already_streaming": "You're already broadcasting.",
+            "mediamtx_not_found": "Broadcast server (MediaMTX) isn't available on this system.",
+            "mediamtx_spawn_failed": "Couldn't start the broadcast server.",
+            "mediamtx_port_or_config": "Broadcast server failed to start — a port may already be in use.",
+            "config_write_failed": "Couldn't write the broadcast server config.",
+            "ffplay_not_found": "Playback unavailable — ffplay (ffmpeg) is missing.",
+            "ffplay_failed": "Couldn't start playback for that station.",
+            "no_url": "That station didn't provide a stream URL.",
+            "no_delivery_client": "Discovery service (delivery_module) is unavailable.",
+            "discovery_not_started": "Open the Listen tab to start discovery first."
+        }
+        return m[code] || ("Something went wrong (" + code + ").")
+    }
+
+    // Checked call: runs the method and surfaces any {ok:false} error in the banner.
+    function call(method, args) {
+        var r = callParse(method, args)
+        if (!r) root.lastError = "No response from radio_module."
+        else if (r.ok === false) root.lastError = errorMessage(r.error)
+        return r
     }
 
     // Clipboard via a hidden TextEdit — Qt.openUrlExternally/clipboard APIs are blocked in the sandbox.
@@ -77,7 +105,7 @@ Item {
             visibility: visGroup.checkedButton === privateBtn ? "private" : "public",
             description: descField.text
         })
-        var r = callParse("startStream", [cfg])
+        var r = call("startStream", [cfg])
         if (r && r.ok) { root.streamState = "waiting"; root.streamCard = r }
     }
     function stopStream() { callParse("stopStream", []); root.streamCard = null; root.streamState = "idle" }
@@ -85,6 +113,21 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+
+        // #15 error banner — surfaces backend failures instead of silent dead-ends.
+        Rectangle {
+            Layout.fillWidth: true
+            color: "#3a1d1d"
+            visible: root.lastError.length > 0
+            implicitHeight: visible ? errRow.implicitHeight + 16 : 0   // implicitHeight, not height (layout bug)
+            RowLayout {
+                id: errRow
+                anchors.fill: parent; anchors.margins: 8; spacing: 8
+                Label { text: "⚠"; color: "#ff9a9a" }
+                Label { text: root.lastError; color: "#ff9a9a"; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                Button { text: "✕"; flat: true; onClicked: root.lastError = "" }
+            }
+        }
 
         TabBar {
             id: tabs
@@ -242,7 +285,7 @@ Item {
                         TextField { id: topicField; Layout.fillWidth: true; placeholderText: "Add a private topic" }
                         Button {
                             text: "Add"; enabled: topicField.text.length > 0
-                            onClicked: { root.callParse("addTopic", [topicField.text]); topicField.text = "" }
+                            onClicked: { root.call("addTopic", [topicField.text]); topicField.text = "" }
                         }
                     }
                 }

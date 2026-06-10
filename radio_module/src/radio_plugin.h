@@ -67,7 +67,7 @@ signals:
 private:
     // --- Origin (#2 spawn + #3 mint) ---
     QString  writeMediaMtxConfig() const;  // returns config path, or "" on failure
-    bool     spawnMediaMtx(const QString& configPath);
+    QString  spawnMediaMtx(const QString& configPath);  // "" ok, else an error code (#15)
     void     killMediaMtx();
     QString  lanIp() const;                // first non-loopback IPv4, else 127.0.0.1
     static QString randomHex(int bytes);
@@ -81,7 +81,7 @@ private:
     bool     subscribeTopic(const QString& topic);
     bool     ensureDeliveryNode();         // idempotent delivery_module getClient + createNode + start
     void     killPlayer();                 // stop + reap the ffplay process (#9)
-    bool     startFfplay();                // (re)launch ffplay on m_playingUrl at m_volume (#9/#13)
+    QString  startFfplay();                // (re)launch ffplay on m_playingUrl; "" ok else error code
 
     // NB: do NOT declare a LogosAPI* member — initLogos must set the base PluginInterface::logosAPI,
     // which ModuleProxy reads for cross-module IPC (skills: logosapi-member-no-redeclare, initlogos-no-override).
