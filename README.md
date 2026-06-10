@@ -91,6 +91,19 @@ in this module:
 The supported fix is to consume `delivery_module` from a **`ui_qml` module with a C++ backend**
 (the shape `logos-delivery-demo` uses); that refactor is in progress on the `ui-qml-backend` branch.
 
+## Privacy ⚠️
+
+v1 gives you **sovereign discovery, not streamer anonymity.** Discovery rides LogosMessaging, but the
+audio is a **direct HTTP pull from the host's origin**, and the announce **contains the host's address**
+(`streamUrl`). So any subscriber to a public topic learns the host's IP, and any listener who plays opens
+a direct connection (host ↔ listener IPs both exposed). Today it's a *LAN* IP (LAN-scoped leak), but a
+public deployment would expose the public IP.
+
+**To actually hide the streamer's IP**, the smallest change for this audio-first module is a **Tor onion
+service**: announce a `…​.onion` URL and route the listener's `ffplay` through Tor (`torsocks`). For
+private/among-friends streams, a **Tailscale/WireGuard mesh** is the easiest. Full threat model + ranked
+options: [`docs/BRIEF.md` §Privacy](docs/BRIEF.md#️-privacy--threat-model--v1-hides-discovery-not-the-streamers-ip).
+
 ## Dependencies
 
 | Module | Installed name | Repo | Role |

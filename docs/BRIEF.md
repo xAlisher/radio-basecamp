@@ -107,3 +107,50 @@ incentive/token layer. No transcoding marketplace, no DRM. **No video display in
 - **Origin uplink is the scaling limit** — MediaMTX serves every listener directly; host
   bandwidth caps the audience. This is the wall Phase 2 (swarm) removes. Don't pre-optimize.
 - Discovery liveness depends on heartbeat/TTL (no Store to fall back on).
+
+## ⚠️ Privacy & threat model — v1 hides discovery, NOT the streamer's IP
+
+v1 delivers **sovereign discovery** (no central index) but **not streamer anonymity**. The split is
+*decentralized discovery, direct delivery*: discovery rides LogosMessaging, but the audio is a plain
+HTTP pull from the host's origin. Consequences (see `radio_plugin.cpp` `buildAnnouncePayload`):
+
+- The announce payload **contains the host's address** — `streamUrl = http://<lanIp()>:<port>/<path>/index.m3u8`.
+  For a **public** stream the topic is the well-known directory, so **every subscriber sees the host's IP**
+  just by listening.
+- Playback is a **direct origin connection** — the listener's `ffplay` opens that URL, so the listener
+  learns the host's IP **and** the host's MediaMTX sees every listener's IP. No relay in between.
+- Waku's transport-level sender-unlinkability is **moot**: the host self-doxxes by putting its IP in the
+  message body.
+- *Today* `lanIp()` returns a private LAN address, so the leak is LAN-scoped (also why the demo is
+  same-LAN only). The moment it runs on a public IP / port-forward, the announce carries the **public** IP.
+
+| Actor | Learns host IP? | Learns listener IP? |
+|-------|:---:|:---:|
+| Any directory-topic subscriber | ✅ (in announce) | — |
+| A listener who plays | ✅ | ✅ (host sees it) |
+| The host | — | ✅ (direct conn) |
+
+### Easiest ways to actually hide the streamer's IP (researched 2026-06-10)
+
+Ranked by fit with this module (audio-first → low bitrate, and discovery is already a *URL* on Waku, so
+most options are a near drop-in: change the announced URL + how `ffplay` dials out):
+
+1. **Tor onion service — recommended; most sovereign, hides *both* IPs.** Host runs `tor` with a hidden
+   service mapping `:80 → 127.0.0.1:<HLS port>`; announce `http://<hash>.onion/<path>/index.m3u8`
+   (the `play()` http/https allow-list already accepts it). Listener routes `ffplay` through Tor's SOCKS5
+   (`torsocks ffplay …` or `9050`). No account, no domain, no CDN — fits "no platform" ethos. There's a
+   working HLS-over-Tor reference ([onion-livestreaming](https://github.com/meetkool/onion-livestreaming)).
+   Trade-off: +latency / lower bandwidth — *fine for audio*, painful for video. Add `tor` to nix runtime deps.
+2. **Tailscale / WireGuard mesh — easiest for *private* (friends) streams.** Host + listeners share a
+   tailnet; announce the `100.x.y.z` tailnet IP; only mesh members can connect → public IP hidden. One
+   command (`tailscale up`). Not for *open* public discovery (only tailnet members reach it); control plane
+   is centralized though media is P2P WireGuard.
+3. **Cloudflare Tunnel / CDN — easiest internet exposure, but a trust/centralization compromise.**
+   `cloudflared` hides the home IP with no port-forward, but Cloudflare **explicitly discourages media
+   streaming over tunnels** (bandwidth, persistent-connection resets); for HLS prefer a proxied CDN domain
+   with segment caching. Cloudflare becomes a trust point that sees everything — against the sovereignty goal.
+
+**Recommendation:** for v1's audio-first scope, **Tor onion service** is the smallest change that genuinely
+hides the streamer (announce a `.onion`, wrap the listener's `ffplay` in `torsocks`). Tailscale is the
+pragmatic pick for private/among-friends streams. Treat any public, non-Tor announce as inherently
+IP-revealing and label it as such in the UI.
