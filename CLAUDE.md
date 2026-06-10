@@ -45,7 +45,7 @@ Nix only sees git-tracked files — `git add -A` before building.
 | 9 | Listen | Directory render + tap-to-play | P0 | done |
 | 10 | Liveness | Heartbeat re-announce (15s) | P1 | done |
 | 11 | Liveness | TTL expiry (45s) | P1 | done |
-| 12 | Liveness | + Add topic (private streams) | P1 | todo |
+| 12 | Liveness | + Add topic (private streams) | P1 | done (live subscribe → AppImage) |
 | 13 | Player | Player controls (pause/resume/vol) | P1 | todo |
 | 14 | Polish | Empty + transitional states | P1 | todo |
 | 15 | Harden | Error UX & silent-failure guards | P2 | todo |
