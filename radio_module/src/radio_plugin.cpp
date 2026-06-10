@@ -164,7 +164,11 @@ QString RadioModulePlugin::writeMediaMtxConfig() const
       << "apiAddress: :"    << port("RADIO_API_PORT",  9997) << "\n"
       << "api: yes\n"
       << "hls: yes\n"
-      << "hlsVariant: lowLatency\n"
+      // #17 mpegts (not lowLatency) so listeners fetch whole segments and can buffer over high-RTT
+      // Tor; a deep playlist (24 × 1s) lets the listener start up to ~20s behind live to absorb jitter.
+      << "hlsVariant: mpegts\n"
+      << "hlsSegmentCount: 24\n"
+      << "hlsSegmentDuration: 1s\n"
       << "webrtc: yes\n"   // WHIP ingest endpoint (OBS 30+)
       << "srt: yes\n"
       << "rtsp: no\n"
@@ -686,8 +690,12 @@ QPair<QString, QStringList> RadioModulePlugin::buildPlayerCommand(const QString&
 {
     const QString ffplay = resolveBin(QStringLiteral("ffplay"), "RADIO_FFPLAY_BIN");
     QStringList ffargs;
-    ffargs << "-nodisp" << "-autoexit" << "-loglevel" << "error"
-           << "-volume" << QString::number(m_volume) << url;
+    ffargs << "-nodisp" << "-autoexit" << "-loglevel" << "error" << "-infbuf";
+    // #17 jitter buffer: start N segments behind the live edge (MediaMTX serves 1s mpegts segments)
+    // so playback rides out Tor latency spikes; -infbuf lets ffplay hold the read-ahead.
+    if (m_listenBufferSec > 0)
+        ffargs << "-live_start_index" << QString::number(-m_listenBufferSec);
+    ffargs << "-volume" << QString::number(m_volume) << url;
     // ffmpeg has no native SOCKS; route .onion playback through torsocks (LD_PRELOAD → tor SOCKS).
     if (isOnionUrl(url)) {
         const QString torsocks = resolveBin(QStringLiteral("torsocks"), "RADIO_TORSOCKS_BIN");
@@ -896,6 +904,15 @@ QString RadioModulePlugin::setVolume(int percent)  // #13 — ffplay has no runt
                                  .toJson(QJsonDocument::Compact));
 }
 
+QString RadioModulePlugin::setListenBuffer(int seconds)  // #17 — deeper buffer rides out Tor jitter
+{
+    m_listenBufferSec = qBound(0, seconds, 20);  // capped by the host playlist depth (24 × 1s)
+    if (m_player && m_player->state() != QProcess::NotRunning && !m_playingUrl.isEmpty())
+        startFfplay();  // re-apply live; brief re-buffer gap
+    return QString::fromUtf8(QJsonDocument(QJsonObject{{"ok", true}, {"bufferSec", m_listenBufferSec}})
+                                 .toJson(QJsonDocument::Compact));
+}
+
 QString RadioModulePlugin::stop()
 {
     if (!m_player) return err("not_playing");
@@ -912,6 +929,6 @@ QString RadioModulePlugin::getPlayerStatus()
     const bool running = m_player && m_player->state() != QProcess::NotRunning;
     return QString::fromUtf8(QJsonDocument(QJsonObject{
         {"ok", true}, {"state", running ? "playing" : "stopped"},
-        {"station", m_playingStation}, {"volume", m_volume}
+        {"station", m_playingStation}, {"volume", m_volume}, {"bufferSec", m_listenBufferSec}
     }).toJson(QJsonDocument::Compact));
 }

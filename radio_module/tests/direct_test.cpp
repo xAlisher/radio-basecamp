@@ -180,6 +180,8 @@ int main(int argc, char** argv) {
         const QStringList oc = op.playerCommandForTest("http://abc23host.onion/p/index.m3u8");
         ok(oc.size() >= 2 && oc.at(0).contains("torsocks") && oc.contains("http://abc23host.onion/p/index.m3u8"),
            "play routes a .onion URL through torsocks");
+        ok(oc.contains("-infbuf") && oc.contains("-live_start_index"),
+           "player applies the listener jitter buffer (#17)");
         const QStringList dc = op.playerCommandForTest("http://1.2.3.4:8888/p/index.m3u8");
         ok(!dc.at(0).contains("torsocks") && dc.at(0).contains("ffplay"),
            "play uses bare ffplay for a non-onion URL");

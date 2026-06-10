@@ -53,6 +53,7 @@ public:
     Q_INVOKABLE QString play(const QString& hlsUrl, const QString& stationName) override;
     Q_INVOKABLE QString stop() override;
     Q_INVOKABLE QString setVolume(int percent) override;
+    Q_INVOKABLE QString setListenBuffer(int seconds) override;
     Q_INVOKABLE QString getPlayerStatus() override;
 
     // Test/IPC seam (#5): decode + ingest a station announce. Called by the delivery_module
@@ -143,6 +144,7 @@ private:
     QProcess* m_player = nullptr;
     QString   m_playingStation, m_playingUrl;
     int       m_volume = 75;      // #13 0–100; applied via ffplay -volume
+    int       m_listenBufferSec = 8;  // #17 listener jitter buffer (ffplay -live_start_index/-infbuf)
 
     // Tor onion mode — separate host (HiddenService) + listener (SOCKS) processes (Senty ISSUE-2)
     QProcess* m_torHost = nullptr;     // SocksPort 0 + HiddenService (hosting in onion mode)

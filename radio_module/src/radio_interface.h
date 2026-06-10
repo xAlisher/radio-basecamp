@@ -58,7 +58,10 @@ public:
     // No pause for live radio — pausing a live stream is just stop (the live edge moves on and
     // MediaMTX rotates the HLS segments away). Controls are Play / Stop / Volume.
     Q_INVOKABLE virtual QString setVolume(int percent) = 0; // #13
-    /** @return {state:"stopped"|"playing", station, volume} (#9 #13) */
+    /** Listener jitter buffer in seconds (#17). Deeper = smoother over Tor, higher start latency.
+     *  Re-applies to the live player immediately. @return {ok, bufferSec} */
+    Q_INVOKABLE virtual QString setListenBuffer(int seconds) = 0;
+    /** @return {state:"stopped"|"playing", station, volume, bufferSec} (#9 #13 #17) */
     Q_INVOKABLE virtual QString getPlayerStatus() = 0;
 };
 

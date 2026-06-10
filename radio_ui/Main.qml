@@ -27,6 +27,7 @@ Item {
     property var    streamCard:   null
     property string streamState:  "idle"
     property string streamPrivacy: "public"   // public | onion (this host's broadcast)
+    property int    listenBuffer:  8           // #17 listener jitter buffer (seconds)
     property string onionAddr:    ""          // our .onion once published (onion mode)
     property bool   onionReady:   false        // hidden-service descriptor published → reachable
     property string onionError:   ""           // non-empty → Tor setup failed/timed out
@@ -449,6 +450,16 @@ Item {
                         Slider { from: 0; to: 100; value: root.volume; Layout.preferredWidth: 100
                             onMoved: { root.volume = Math.round(value); root.call("setVolume", [root.volume]) } }
                         DarkButton { text: "Stop"; onClicked: { root.call("stop", []); root.playingName = "" } }
+                    }
+                    RowLayout {  // listener jitter buffer (#17) — deeper rides out Tor latency spikes
+                        Layout.fillWidth: true; spacing: 8
+                        Label { text: "Buffer"; color: root.textSecondary; font.pixelSize: 12; Layout.preferredWidth: 48 }
+                        Slider {
+                            id: bufSlider; from: 2; to: 20; stepSize: 1; value: root.listenBuffer
+                            Layout.fillWidth: true
+                            onMoved: { root.listenBuffer = Math.round(value); root.call("setListenBuffer", [root.listenBuffer]) }
+                        }
+                        Label { text: root.listenBuffer + "s"; color: root.textPrimary; font.pixelSize: 12; Layout.preferredWidth: 30 }
                     }
                     RowLayout {  // + add private topic
                         Layout.fillWidth: true; spacing: 8
