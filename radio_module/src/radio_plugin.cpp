@@ -650,7 +650,7 @@ QString RadioModulePlugin::startFfplay()
         // the wrong proxy or fail and fall back to a direct connection → listener IP leak.
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert("TORSOCKS_TOR_ADDRESS", "127.0.0.1");
-        env.insert("TORSOCKS_TOR_PORT", QString::number(torSocksPort()));
+        env.insert("TORSOCKS_TOR_PORT", QString::number(m_listenSocksPort > 0 ? m_listenSocksPort : torSocksPort()));
         env.insert("TORSOCKS_ISOLATE_PID", "1");
         m_player->setProcessEnvironment(env);
     }
@@ -714,7 +714,16 @@ bool RadioModulePlugin::startTorProc(QProcess*& proc, const QString& dir, const 
     // Immediate exit ⇒ bad config or the SocksPort/HS port already in use (Senty ISSUE-3) — don't
     // proceed as if Tor were healthy, which would silently break the privacy transport.
     if (proc->waitForFinished(500)) {
-        qWarning() << "RadioModulePlugin: tor exited immediately:" << proc->readAll();
+        const QByteArray out = proc->readAll();
+        qWarning() << "RadioModulePlugin: tor exited immediately:" << out;
+        // logos_host child stderr is swallowed (#163) — persist the real reason for diagnosis.
+        const QString diagPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                                 + "/radio_module/tor-fail.log";
+        QDir().mkpath(QFileInfo(diagPath).absolutePath());
+        QFile diag(diagPath);
+        if (diag.open(QIODevice::WriteOnly | QIODevice::Append)) {
+            diag.write("---- tor exited immediately ----\n"); diag.write(out); diag.write("\n"); diag.close();
+        }
         proc->deleteLater(); proc = nullptr;
         return fail(QStringLiteral("tor_port_in_use"));
     }
@@ -752,16 +761,23 @@ QString RadioModulePlugin::ensureTorHost()
 QString RadioModulePlugin::ensureTorListen()
 {
     if (m_torListen && m_torListen->state() == QProcess::Running) return QString();
-    m_torListenDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-                     + "/radio_module/torlisten-" + randomHex(4);
-    QString cfg;
-    QTextStream s(&cfg);
-    s << "SocksPort " << torSocksPort() << "\n"
-      << "DataDirectory " << m_torListenDir << "/data\n"
-      << "Log notice file " << m_torListenDir << "/tor.log\n";
+    const int base = torSocksPort();
     QString err;
-    if (!startTorProc(m_torListen, m_torListenDir, cfg, err)) { m_torListenDir.clear(); return err; }
-    return QString();
+    // Retry on the next port if the SOCKS port is momentarily taken (e.g. a previous listener tor
+    // hasn't fully released it) — a transient conflict must not fail playback (was: tor_port_in_use).
+    for (int off = 0; off < 4; ++off) {
+        const int p = base + off;
+        m_torListenDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                         + "/radio_module/torlisten-" + randomHex(4);
+        QString cfg;
+        QTextStream s(&cfg);
+        s << "SocksPort " << p << "\n"
+          << "DataDirectory " << m_torListenDir << "/data\n"
+          << "Log notice file " << m_torListenDir << "/tor.log\n";
+        if (startTorProc(m_torListen, m_torListenDir, cfg, err)) { m_listenSocksPort = p; return QString(); }
+        m_torListenDir.clear();
+    }
+    return err;  // every candidate port failed → a real error (not a transient conflict)
 }
 
 void RadioModulePlugin::pollOnionStatus()
@@ -828,6 +844,7 @@ void RadioModulePlugin::killTorListen()
         m_torListen = nullptr;
     }
     if (!m_torListenDir.isEmpty()) { QDir(m_torListenDir).removeRecursively(); m_torListenDir.clear(); }
+    m_listenSocksPort = 0;
 }
 
 // --- Test seams (not IPC API) ---

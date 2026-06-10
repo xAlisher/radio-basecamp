@@ -147,6 +147,7 @@ private:
     // Tor onion mode — separate host (HiddenService) + listener (SOCKS) processes (Senty ISSUE-2)
     QProcess* m_torHost = nullptr;     // SocksPort 0 + HiddenService (hosting in onion mode)
     QProcess* m_torListen = nullptr;   // SocksPort (playing a .onion)
+    int       m_listenSocksPort = 0;   // the SOCKS port the listener tor actually bound (retry-picked)
     QString   m_privacy = QStringLiteral("public");  // "public" | "onion"
     QString   m_onion;            // .onion host once the hidden-service hostname is known
     QString   m_torHostDir;       // host tor DataDirectory + HiddenServiceDir root (temp)
