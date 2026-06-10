@@ -303,11 +303,47 @@ QString RadioModulePlugin::getStreamCard()
     return QString::fromUtf8(QJsonDocument(buildCard()).toJson(QJsonDocument::Compact));
 }
 
+// #17 — rotate the secret publish key. Path/.onion are unchanged (listeners keep playing); MediaMTX
+// restarts with the new auth so the old OBS key stops working until re-entered.
+QString RadioModulePlugin::regenerateKey()
+{
+    if (!m_mediamtx) return err("not_streaming");
+    m_streamKey = randomHex(16);
+    killMediaMtx();
+    const QString cfgPath = writeMediaMtxConfig();
+    if (cfgPath.isEmpty()) return err("config_write_failed");
+    const QString se = spawnMediaMtx(cfgPath);
+    if (!se.isEmpty()) return err(se);
+    saveStreamState();
+    emit eventResponse("streamKeyRotated", QVariantList() << m_path);
+    return QString::fromUtf8(QJsonDocument(buildCard()).toJson(QJsonDocument::Compact));
+}
+
+// #17 — rotate the Tor hidden-service identity to a brand-new .onion. Wipes the persistent HS keys
+// and restarts the host tor; the new address arrives async and is re-announced via the heartbeat.
+QString RadioModulePlugin::regenerateOnion()
+{
+    if (!m_mediamtx) return err("not_streaming");
+    if (m_privacy != QStringLiteral("onion")) return err("not_onion");
+    killTorHost();
+    QDir(persistentHsDir()).removeRecursively();
+    const QString e = ensureTorHost();
+    if (!e.isEmpty()) return err(e);
+    emit eventResponse("onionRotated", QVariantList() << m_path);
+    return ok();
+}
+
 // --- #11 stream-state persistence (survives a Basecamp restart) ---
 QString RadioModulePlugin::stateFile() const
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
            + "/radio_module/station.json";  // per-profile (respects XDG_DATA_HOME)
+}
+
+QString RadioModulePlugin::persistentHsDir() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+           + "/radio_module/hs";  // #17 stable Tor hidden-service keys (per-profile)
 }
 
 void RadioModulePlugin::saveStreamState() const
@@ -350,7 +386,11 @@ void RadioModulePlugin::resumeStreamIfPersisted()
     const QString configPath = writeMediaMtxConfig();
     if (configPath.isEmpty() || !spawnMediaMtx(configPath).isEmpty()) {
         if (!m_runtimeDir.isEmpty()) QDir(m_runtimeDir).removeRecursively();
-        clearStreamState(); m_path.clear(); return;
+        // #17 — KEEP station.json on a transient spawn failure (e.g. ports busy right after restart)
+        // so the stream key is never silently lost; a later restart resumes with the same identity.
+        m_path.clear(); m_streamKey.clear();
+        qWarning() << "RadioModulePlugin: resume spawn failed; persisted profile kept for retry";
+        return;
     }
     if (m_privacy == "onion") { m_onion.clear(); m_onionReady = false; ensureTorHost(); }
     m_heartbeat.start(port("RADIO_HEARTBEAT_MS", 15000));
@@ -755,7 +795,9 @@ QString RadioModulePlugin::ensureTorHost()
     if (m_torHost && m_torHost->state() == QProcess::Running) return QString();
     m_torHostDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
                    + "/radio_module/torhost-" + (m_path.isEmpty() ? randomHex(4) : m_path);
-    const QString hsDir = m_torHostDir + "/hs";
+    // #17 — the hidden-service keys live in a PERSISTENT per-profile dir (not the temp run dir), so the
+    // .onion address survives restarts. regenerateOnion() wipes it to mint a fresh address on demand.
+    const QString hsDir = persistentHsDir();
     QDir().mkpath(hsDir);
     QFile::setPermissions(hsDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     QString cfg;

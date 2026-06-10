@@ -44,6 +44,8 @@ public:
     Q_INVOKABLE QString ping() override;
     Q_INVOKABLE QString startStream(const QString& configJson) override;
     Q_INVOKABLE QString stopStream() override;
+    Q_INVOKABLE QString regenerateKey() override;
+    Q_INVOKABLE QString regenerateOnion() override;
     Q_INVOKABLE QString getStreamStatus() override;
     Q_INVOKABLE QString getStreamCard() override;
     Q_INVOKABLE QString getDeliveryStatus() override;
@@ -82,6 +84,7 @@ private:
     // #11 — OBS card builder + stream-state persistence (survives a Basecamp restart)
     QJsonObject buildCard() const;
     QString  stateFile() const;
+    QString  persistentHsDir() const;  // #17 persistent Tor HiddenServiceDir → stable .onion
     void     saveStreamState() const;
     void     clearStreamState() const;
     void     resumeStreamIfPersisted();

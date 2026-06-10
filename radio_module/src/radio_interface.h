@@ -34,6 +34,12 @@ public:
     Q_INVOKABLE virtual QString startStream(const QString& configJson) = 0;
     /** Stop origin + announce. @return {ok} (#2) */
     Q_INVOKABLE virtual QString stopStream() = 0;
+    /** Rotate the secret publish key (#17). Rewrites MediaMTX auth + restarts it; the public path /
+     *  .onion are unchanged (listeners unaffected), OBS must re-enter the new key. @return new card. */
+    Q_INVOKABLE virtual QString regenerateKey() = 0;
+    /** Rotate the Tor hidden-service identity → a NEW .onion (#17). Listeners rediscover via the
+     *  heartbeat. Onion mode only. @return {ok}. */
+    Q_INVOKABLE virtual QString regenerateOnion() = 0;
     /** Poll MediaMTX. @return {state:"idle"|"waiting"|"receiving"|"live", hlsUrl, privacy, onion, onionReady} (#4).
      *  Also emits `streamStatusChanged`. */
     Q_INVOKABLE virtual QString getStreamStatus() = 0;

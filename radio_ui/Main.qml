@@ -380,6 +380,8 @@ Item {
                             property string value: ""
                             property bool secret: false   // masked with dots (safe for screenshots)
                             property bool revealed: false
+                            property bool canRegen: false
+                            signal regen()
                             Layout.fillWidth: true; spacing: 8
                             Label { text: cr.label; color: root.textSecondary; Layout.preferredWidth: 90; font.pixelSize: 12 }
                             DarkField {
@@ -387,10 +389,33 @@ Item {
                                 echoMode: (cr.secret && !cr.revealed) ? TextInput.Password : TextInput.Normal
                             }
                             DarkButton { visible: cr.secret; text: cr.revealed ? "Hide" : "Show"; onClicked: cr.revealed = !cr.revealed }
+                            DarkButton { visible: cr.canRegen; text: "⟳ New"; onClicked: cr.regen() }   // #17 rotate key
                             DarkButton { text: "Copy"; onClicked: root.copyText(cr.value) }   // copies the real value
                         }
                         CopyRow { label: "RTMP Server"; value: root.streamCard ? root.streamCard.rtmpUrl : "" }
-                        CopyRow { label: "Stream Key"; value: root.streamCard ? root.streamCard.streamKey : ""; secret: true }
+                        CopyRow {
+                            label: "Stream Key"; value: root.streamCard ? root.streamCard.streamKey : ""
+                            secret: true; canRegen: true
+                            onRegen: {  // #17 rotate the publish key (revokes the old OBS key)
+                                var r = root.callParse("regenerateKey", [])
+                                if (r && r.ok) { root.streamCard = r
+                                    logEvent("Stream key rotated — re-enter the new key in OBS", "warning") }
+                            }
+                        }
+                        RowLayout {  // #17 Tor address persists across restarts; rotate on demand
+                            visible: root.streamPrivacy === "onion"
+                            Layout.fillWidth: true; spacing: 8
+                            Label { text: "Tor address"; color: root.textSecondary; Layout.preferredWidth: 90; font.pixelSize: 12 }
+                            Label {
+                                Layout.fillWidth: true; font.pixelSize: 11; color: root.textMuted; elide: Text.ElideRight
+                                text: root.onionReady ? "stable · persists across restarts" : "publishing…"
+                            }
+                            DarkButton { text: "⟳ New address"; onClicked: {  // rotate the .onion identity
+                                var r = root.callParse("regenerateOnion", [])
+                                if (r && r.ok) { root.onionReady = false; root.onionAddr = ""
+                                    logEvent("Rotating Tor address — listeners will rediscover", "warning") }
+                            } }
+                        }
                         DarkButton { text: "Stop"; onClicked: root.stopStream() }
                     }
                     Item { Layout.fillHeight: true }
