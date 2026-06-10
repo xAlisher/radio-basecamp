@@ -17,9 +17,9 @@ index, no account — and play it. The differentiator is **discovery, not delive
 Two machines, no server between them — the host streams from OBS while a *separate* listener
 discovers the station over LogosMessaging (Waku) and plays it:
 
-| Host — broadcasting (OBS → MediaMTX → announce) | Listener — discovered & playing over LogosMessaging |
+| Host — start a station (Stream tab) | Listener — discovered & playing over LogosMessaging |
 |:--:|:--:|
-| ![Host: Stream tab, live and announcing](docs/images/demo-host-stream.png) | ![Listener: Listen tab showing the discovered station](docs/images/demo-listener.png) |
+| ![Host: Stream tab — name, visibility, start](docs/images/demo-host-stream.png) | ![Listener: Listen tab showing the discovered station](docs/images/demo-listener.png) |
 
 ---
 
