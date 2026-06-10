@@ -4,10 +4,22 @@ Decentralized **audio broadcast** module for [Logos Basecamp](https://github.com
 A host broadcasts a stream; listeners **discover it over LogosMessaging by topic** — no central
 index, no account — and play it. The differentiator is **discovery, not delivery**.
 
-> Status (2026-06-10): **P0 vertical slice complete** — backend (origin, discovery, playback) and
-> the Stream + Listen UI are built and tested. The remaining step is the live cross-machine demo
-> (the `delivery_module` network round-trip). v1 is **audio-first**. Implementation tracked in
+> Status (2026-06-10): **P0 vertical slice complete and demoed cross-machine** — a host broadcasts
+> and a *separate machine* discovers it over LogosMessaging and plays it, with no central index.
+> ⚠️ Runs on Basecamp **`pre-release-1dc1c08-268`** — newer builds crash any `delivery_module`
+> consumer (see [Compatibility](#compatibility)). v1 is **audio-first**. Implementation tracked in
 > [`docs/plans/radio-implementation.md`](docs/plans/radio-implementation.md).
+
+---
+
+## Demo
+
+Two machines, no server between them — the host streams from OBS while a *separate* listener
+discovers the station over LogosMessaging (Waku) and plays it:
+
+| Host — broadcasting (OBS → MediaMTX → announce) | Listener — discovered & playing over LogosMessaging |
+|:--:|:--:|
+| ![Host: Stream tab, live and announcing](docs/images/demo-host-stream.png) | ![Listener: Listen tab showing the discovered station](docs/images/demo-listener.png) |
 
 ---
 
@@ -56,6 +68,28 @@ Two modules (tutorial-v3 canonical: core + QML UI):
 the AppImage (playback uses `ffplay`); the QML sandbox blocks network/subprocess (all I/O is in the
 core module); "Waku" is now `delivery_module` (LogosMessaging), which has no history query, so
 discovery is heartbeat-only.
+
+## Compatibility
+
+| Basecamp build | radio works? |
+|----------------|:---:|
+| **[`pre-release-1dc1c08-268`](https://github.com/logos-co/logos-basecamp/releases/tag/pre-release-1dc1c08-268)** (2026-05-19, the demo above) | ✅ |
+| `0.1.2` / `pre-release-2576ef8-269` and newer | ❌ |
+| [`pre-release-63b35e8-295`](https://github.com/logos-co/logos-basecamp/releases/tag/pre-release-63b35e8-295) (current pre-release) | ❌ |
+
+**Why newer builds break it:** `radio_module` is a `type: core` module that consumes
+`delivery_module`, and on current platform builds **constructing the typed SDK crashes at load** —
+`new LogosModules(api)` throws `std::length_error` inside `LogosAPI::getClient` (the `CoreManager`
+constructor), before any of our code runs. It's an acknowledged, open platform limitation, not a bug
+in this module:
+
+- [logos-delivery-module#31](https://github.com/logos-co/logos-delivery-module/issues/31) — a core module consuming delivery SIGSEGVs in `getClient` (identical stack)
+- [logos-basecamp#150](https://github.com/logos-co/logos-basecamp/issues/150) — third-party **core** plugins have no IPC token-bootstrap path
+- [logos-basecamp#169](https://github.com/logos-co/logos-basecamp/issues/169) — UI → core → delivery dev-`.lgx` trips the 2 s token-handshake → spinner
+- [logos-tutorial#67](https://github.com/logos-co/logos-tutorial/issues/67) — our write-up of the trap
+
+The supported fix is to consume `delivery_module` from a **`ui_qml` module with a C++ backend**
+(the shape `logos-delivery-demo` uses); that refactor is in progress on the `ui-qml-backend` branch.
 
 ## Dependencies
 
