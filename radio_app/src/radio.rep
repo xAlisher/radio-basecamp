@@ -1,0 +1,10 @@
+// Qt Remote Objects interface — the typed contract between the QML replica and the C++ backend.
+// PROP = state auto-synced to QML (READONLY); SLOT = method QML calls (async; use logos.watch).
+class Radio
+{
+    PROP(QString deliveryState="offline" READONLY)   // offline | ready | connected
+    PROP(QString peerId="" READONLY)
+    PROP(QString lastError="" READONLY)
+
+    SLOT(QString startDiscovery())
+}
