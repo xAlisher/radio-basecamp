@@ -140,19 +140,20 @@ Item {
     // ── Activity log (#12 / #15): every pill change + error is a timestamped record ──────────
     function ts2(n) { return (n < 10 ? "0" : "") + n }
     function nowTs() { var d = new Date(); return "[" + ts2(d.getHours()) + ":" + ts2(d.getMinutes()) + ":" + ts2(d.getSeconds()) + "]" }
-    function logEvent(msg, level) {
-        logModel.insert(0, { "ts": nowTs(), "msg": msg, "level": level || "info" })
-        while (logModel.count > 100) logModel.remove(logModel.count - 1)   // cap (qml-activitylog-component)
+    function logEvent(msg, level) {  // oldest-first, newest at bottom + auto-scroll (keycard ActivityLog)
+        logModel.append({ "ts": nowTs(), "msg": msg, "level": level || "info" })
+        if (logModel.count > 100) logModel.remove(0)
+        logList.positionViewAtEnd()
     }
-    function levelColor(l) { return l === "success" ? root.successGreen : l === "warn" ? root.warningYellow : l === "error" ? root.errorRed : root.textSecondary }
+    function levelColor(l) { return l === "success" ? root.successGreen : l === "warning" ? root.warningYellow : l === "error" ? root.errorRed : root.textSecondary }
     ListModel { id: logModel }
 
     // Fold every status/error transition into the activity log (onXChanged fires only on real change).
-    onDeliveryStateChanged: logEvent(deliveryLabel(), deliveryState === "connected" ? "success" : deliveryState === "ready" ? "warn" : "error")
-    onStreamStateChanged: if (streamCard !== null) logEvent("OBS: " + obsLabel(), obsLive() ? "success" : "warn")
-    onOnionReadyChanged: if (onionReady) logEvent("Onion ready", "success")
+    onDeliveryStateChanged: logEvent(deliveryLabel(), deliveryState === "connected" ? "success" : deliveryState === "ready" ? "warning" : "error")
+    onStreamStateChanged: if (streamCard !== null) logEvent("OBS: " + obsLabel(), obsLive() ? "success" : "warning")
+    onOnionReadyChanged: if (onionReady) logEvent("Onion ready · " + onionAddr, "success")   // the tor link
     onOnionErrorChanged: if (onionError.length > 0) logEvent("Tor: " + onionError, "error")
-    onOnionAddrChanged: if (onionAddr.length > 0 && !onionReady) logEvent("Tor: publishing descriptor…", "warn")
+    onOnionAddrChanged: if (onionAddr.length > 0 && !onionReady) logEvent("Tor: publishing descriptor…", "warning")
     onLastErrorChanged: if (lastError.length > 0) logEvent(lastError, "error")
     onPlayingNameChanged: logEvent(playingName.length > 0 ? "▶ Playing " + playingName : "■ Stopped playback", "info")
 
@@ -189,6 +190,7 @@ Item {
 
     // ── Reusable dark controls ───────────────────────────────────────────────
     component StatusPill: Rectangle {
+        id: pill
         property color dot: root.textMuted
         property string label: ""
         height: 28; radius: 14
@@ -200,8 +202,8 @@ Item {
             id: spRow
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 6
-            Rectangle { width: 7; height: 7; radius: 4; Layout.alignment: Qt.AlignVCenter; color: parent.parent.dot }
-            Text { text: parent.parent.label; font.pixelSize: 11; color: root.textPrimary }
+            Rectangle { width: 7; height: 7; radius: 4; Layout.alignment: Qt.AlignVCenter; color: pill.dot }
+            Text { text: pill.label; font.pixelSize: 11; color: root.textPrimary }
         }
     }
     component DarkButton: Button {
@@ -365,39 +367,15 @@ Item {
                         AccentButton { text: "Start"; enabled: nameField.text.length > 0; onClicked: root.startStream() }
                     }
 
-                    // OBS setup card
+                    // Stream-credentials card — live status is in the header pills (OBS / Onion);
+                    // every state change + the .onion link land in the activity log.
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 10
                         visible: root.streamCard !== null
-                        RowLayout {
-                            spacing: 8
-                            Rectangle { width: 12; height: 12; radius: 6; color: root.stateColor() }
-                            Label { text: root.stateLabel(); color: root.textPrimary; font.pixelSize: 15; font.bold: true }
-                        }
                         Label { text: "Stream credentials"; color: root.textPrimary; font.pixelSize: 16; font.bold: true }
                         Label {
                             Layout.fillWidth: true; wrapMode: Text.WordWrap; color: root.textSecondary; font.pixelSize: 12
                             text: "In OBS → Settings → Stream: set Service to “Custom…”, paste the RTMP Server and Stream Key below, then Start Streaming. The key is secret — don't share it."
-                        }
-                        // Onion mode: the publish state + the .onion address listeners discover
-                        RowLayout {
-                            visible: root.streamPrivacy === "onion"
-                            Layout.fillWidth: true; spacing: 8
-                            Label { text: "🧅"; font.pixelSize: 13 }
-                            Label {
-                                Layout.fillWidth: true; elide: Text.ElideMiddle; font.pixelSize: 12
-                                color: root.onionError.length > 0 ? root.errorRed
-                                     : root.onionReady ? root.successGreen : root.warningYellow
-                                text: root.onionError.length > 0 ? "Tor publish timed out — Stop and start again"
-                                     : root.onionReady ? ("Onion ready · " + root.onionAddr)
-                                     : (root.onionAddr.length > 0 ? "Publishing Tor descriptor…" : "Starting Tor…")
-                            }
-                            DarkButton {
-                                visible: root.onionReady && root.onionAddr.length > 0
-                                text: "Copy .onion"
-                                onClicked: root.copyText("http://" + root.onionAddr + "/"
-                                    + (root.streamCard ? root.streamCard.path : "") + "/index.m3u8")
-                            }
                         }
                         component CopyRow: RowLayout {
                             property string label: ""
@@ -493,23 +471,23 @@ Item {
                     Label { text: "(" + logModel.count + ")"; color: root.textMuted; font.pixelSize: 11 }
                     Item { Layout.fillWidth: true }
                     DarkButton { text: "Copy"; enabled: logModel.count > 0
-                        onClicked: { var s = ""; for (var i = logModel.count - 1; i >= 0; i--) { var e = logModel.get(i); s += e.ts + " " + e.msg + "\n" } root.copyText(s) } }
+                        onClicked: { var s = ""; for (var i = 0; i < logModel.count; i++) { var e = logModel.get(i); s += e.ts + " " + e.msg + "\n" } root.copyText(s) } }
                     DarkButton { text: "Clear"; enabled: logModel.count > 0; onClicked: logModel.clear() }
                     DarkButton { text: root.logOpen ? "▾" : "▸"; onClicked: root.logOpen = !root.logOpen }
                 }
                 ListView {
+                    id: logList
                     visible: root.logOpen
                     Layout.fillWidth: true; Layout.preferredHeight: root.logOpen ? 130 : 0
-                    clip: true; model: logModel; spacing: 1
+                    clip: true; model: logModel; spacing: 4
                     ScrollBar.vertical: ScrollBar {}
-                    delegate: RowLayout {
-                        width: ListView.view ? ListView.view.width : 0
-                        spacing: 6
-                        Text { text: model.ts; color: root.textMuted; font.pixelSize: 10; font.family: "monospace" }
-                        TextEdit {
-                            text: model.msg; color: root.levelColor(model.level); font.pixelSize: 11
-                            readOnly: true; selectByMouse: true; Layout.fillWidth: true; wrapMode: Text.Wrap
-                        }
+                    delegate: TextEdit {  // keycard ActivityLog row: monospace "ts message", colored by level
+                        width: logList.width
+                        text: model.ts + " " + model.msg
+                        color: root.levelColor(model.level)
+                        font.pixelSize: 11; font.family: "monospace"
+                        wrapMode: TextEdit.WordWrap
+                        readOnly: true; selectByMouse: true; selectByKeyboard: true
                     }
                 }
                 Label {

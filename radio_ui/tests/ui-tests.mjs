@@ -25,19 +25,19 @@ test("radio_ui: Stream-tab setup-form elements instantiate (#7)", async (app) =>
   await app.expectTexts(["Station name", "Visibility", "Public", "Private", "Start"]);
 });
 
-test("radio_ui: status light instantiates with default-state label (#8)", async (app) => {
-  // streamState defaults to "idle" → stateLabel() = "Waiting for OBS…". expectTexts ignores
-  // visibility, so this proves the status label exists/binds; live transitions need the real app.
-  await app.expectTexts(["Waiting for OBS…"]);
+test("radio_ui: status pills instantiate (#8/#15)", async (app) => {
+  // Status moved to header pills (Discovery + OBS + Onion). The OBS pill's default label is
+  // deterministic; expectTexts ignores visibility so the hidden-until-streaming pill still matches.
+  await app.expectTexts(["Waiting for OBS"]);
 });
 test("radio_ui: Listen-tab elements instantiate (#9)", async (app) => {
   // empty-state label + Add button (station rows + play need live backend data → real app)
   await app.expectTexts(["Listen", "Open to discover stations", "Add"]);
 });
 
-test("radio_ui: empty/transitional state copy (#14)", async (app) => {
-  // Stream status (idle→"Waiting for OBS…") + Listen empty state both instantiate.
-  await app.expectTexts(["Waiting for OBS…", "Open to discover stations"]);
+test("radio_ui: empty/transitional state copy", async (app) => {
+  // Listen empty state + the always-present Activity panel header.
+  await app.expectTexts(["Open to discover stations", "Activity"]);
 });
 
 test("radio_ui: failed start surfaces an error banner (#15)", async (app) => {
