@@ -50,7 +50,7 @@ Nix only sees git-tracked files — `git add -A` before building.
 | 14 | Polish | Empty + transitional states | P1 | done |
 | 15 | Harden | Error UX & silent-failure guards | P2 | done |
 | 16 | Ship | LGX packaging + install | P2 | todo |
-| 17 | Ship | README + user docs | P2 | todo |
+| 17 | Ship | README + user docs | P2 | done |
 | 18 | Ship | Security pass | P2 | todo |
 
 **P0 vertical slice (#1–#9) = the thesis demo:** a host broadcasts, a separate listener
